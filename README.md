@@ -1,6 +1,6 @@
 # gitlab-clone
 
-Clone all repositories from a GitLab group while preserving the group/subgroup directory structure on disk.
+Clone repositories from one or more GitLab groups (or specific repos) while preserving the group/subgroup directory structure on disk.
 
 By default, `glab repo clone -g` dumps all repos into a flat directory. This script mirrors the GitLab namespace hierarchy so you get a local tree that matches your GitLab groups.
 
@@ -22,14 +22,14 @@ Make sure the install directory is in your `$PATH` (e.g. `export PATH="$HOME/.lo
 ## Usage
 
 ```
-gitlab-clone [OPTIONS] <group>
+gitlab-clone [OPTIONS] <target> [<target>...]
 ```
 
 ### Arguments
 
 | Argument | Description |
 |----------|-------------|
-| `<group>` | GitLab group path (e.g. `sre` or `sre/synthetic-tests`) |
+| `<target>` | One or more group paths (e.g. `mygroup/infra`) or specific repos (e.g. `mygroup/infra/some-repo`). Can be mixed freely. |
 
 ### Options
 
@@ -46,11 +46,20 @@ gitlab-clone [OPTIONS] <group>
 ## Examples
 
 ```bash
-# Clone all repos from mygroup (including subgroups)
+# Clone all repos from a group (including subgroups)
 gitlab-clone mygroup
 
+# Clone multiple groups at once
+gitlab-clone mygroup/infra mygroup/platform
+
+# Clone a specific repo
+gitlab-clone mygroup/infra/some-repo
+
+# Mix groups and specific repos
+gitlab-clone mygroup/infra mygroup/platform/some-repo
+
 # Clone to a specific directory
-gitlab-clone -d ~/repos mygroup/infrastructure
+gitlab-clone -d ~/repos mygroup/infra
 
 # Preview what would be cloned
 gitlab-clone -n mygroup
@@ -69,7 +78,7 @@ gitlab-clone -s git.example.com mygroup
 ## How it works
 
 1. Fetches all repos you have access to via `glab repo list --member`
-2. Filters repos whose `path_with_namespace` starts with the given group
+2. Filters repos matching the given targets (exact match for repos, prefix match for groups)
 3. Creates directories matching the GitLab group hierarchy
 4. Clones each repo into its corresponding directory
 5. Skips repos that already exist locally (or pulls with `-u`)
@@ -79,7 +88,7 @@ gitlab-clone -s git.example.com mygroup
 ```
 ~/repos/
   mygroup/
-    infrastructure/
+    infra/
       service-a/
       service-b/
       monitoring/

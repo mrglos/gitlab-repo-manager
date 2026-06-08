@@ -3,12 +3,12 @@ set -euo pipefail
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [OPTIONS] <group> [<group>...]
+Usage: $(basename "$0") [OPTIONS] <target> [<target>...]
 
-Clone all repos from one or more GitLab groups, preserving the group/subgroup directory structure.
+Clone repos from one or more GitLab groups or specific repos, preserving the directory structure.
 
 Arguments:
-  <group>             One or more GitLab group paths (e.g. "mygroup" or "mygroup/infrastructure")
+  <target>            Group path (e.g. "sre/tooling") or specific repo (e.g. "sre/tooling/yocto")
 
 Options:
   -d, --dest DIR      Base directory for clones (default: current directory)
@@ -21,7 +21,10 @@ Options:
 
 Examples:
   $(basename "$0") mygroup
-  $(basename "$0") -d ~/repos -u mygroup/infrastructure
+  $(basename "$0") mygroup/infra mygroup/platform
+  $(basename "$0") mygroup/infra/some-repo
+  $(basename "$0") mygroup/infra mygroup/platform/some-repo
+  $(basename "$0") -d ~/repos -u mygroup/infra
   $(basename "$0") -p https -n mygroup
   $(basename "$0") -s git.example.com mygroup
 EOF
@@ -112,8 +115,8 @@ while true; do
   ((PAGE++))
 done
 
-TARGET_GROUPS_JSON=$(jq -n '$ARGS.positional' --args "${TARGET_GROUPS[@]}")
-ALL_REPOS=$(echo "$ALL_REPOS" | jq --argjson groups "$TARGET_GROUPS_JSON" '[.[] | select(.path_with_namespace as $p | $groups | any(. as $g | $p | startswith($g + "/")))]')
+TARGETS_JSON=$(jq -n '$ARGS.positional' --args "${TARGET_GROUPS[@]}")
+ALL_REPOS=$(echo "$ALL_REPOS" | jq --argjson targets "$TARGETS_JSON" '[.[] | select(.path_with_namespace as $p | $targets | any(. as $t | $p == $t or ($p | startswith($t + "/"))))]')
 
 if [[ "$INCLUDE_ARCHIVED" == "false" ]]; then
   ALL_REPOS=$(echo "$ALL_REPOS" | jq '[.[] | select(.archived == false)]')
