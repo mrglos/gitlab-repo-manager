@@ -3,12 +3,12 @@ set -euo pipefail
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [OPTIONS] <group>
+Usage: $(basename "$0") [OPTIONS] <group> [<group>...]
 
-Clone all repos from a GitLab group, preserving the group/subgroup directory structure.
+Clone all repos from one or more GitLab groups, preserving the group/subgroup directory structure.
 
 Arguments:
-  <group>             GitLab group path (e.g. "mygroup" or "mygroup/infrastructure")
+  <group>             One or more GitLab group paths (e.g. "mygroup" or "mygroup/infrastructure")
 
 Options:
   -d, --dest DIR      Base directory for clones (default: current directory)
@@ -34,7 +34,7 @@ SSH_HOST=""
 INCLUDE_ARCHIVED=false
 UPDATE=false
 DRY_RUN=false
-GROUP=""
+TARGET_GROUPS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -46,12 +46,12 @@ while [[ $# -gt 0 ]]; do
     -n|--dry-run)   DRY_RUN=true; shift ;;
     -h|--help)      usage ;;
     -*)             echo "Unknown option: $1" >&2; exit 1 ;;
-    *)              GROUP="$1"; shift ;;
+    *)              TARGET_GROUPS+=("$1"); shift ;;
   esac
 done
 
-if [[ -z "$GROUP" ]]; then
-  echo "Error: group argument is required" >&2
+if [[ ${#TARGET_GROUPS[@]} -eq 0 ]]; then
+  echo "Error: at least one group argument is required" >&2
   usage
 fi
 
@@ -89,9 +89,16 @@ PER_PAGE=100
 ALL_REPOS="[]"
 
 while true; do
-  RESPONSE=$(glab repo list --member -F json -P "$PER_PAGE" -p "$PAGE" 2>/dev/null)
+  if ! RESPONSE=$(glab repo list --member -F json -P "$PER_PAGE" -p "$PAGE" 2>/dev/null); then
+    echo "Error: glab repo list failed. Check your authentication (glab auth status)." >&2
+    exit 1
+  fi
 
-  COUNT=$(echo "$RESPONSE" | jq 'length')
+  if ! COUNT=$(echo "$RESPONSE" | jq 'length' 2>/dev/null); then
+    echo "Error: unexpected response from glab (not valid JSON). Check your authentication (glab auth status)." >&2
+    exit 1
+  fi
+
   if [[ "$COUNT" -eq 0 ]]; then
     break
   fi
@@ -105,7 +112,8 @@ while true; do
   ((PAGE++))
 done
 
-ALL_REPOS=$(echo "$ALL_REPOS" | jq --arg group "$GROUP" '[.[] | select(.path_with_namespace | startswith($group + "/"))]')
+TARGET_GROUPS_JSON=$(jq -n '$ARGS.positional' --args "${TARGET_GROUPS[@]}")
+ALL_REPOS=$(echo "$ALL_REPOS" | jq --argjson groups "$TARGET_GROUPS_JSON" '[.[] | select(.path_with_namespace as $p | $groups | any(. as $g | $p | startswith($g + "/")))]')
 
 if [[ "$INCLUDE_ARCHIVED" == "false" ]]; then
   ALL_REPOS=$(echo "$ALL_REPOS" | jq '[.[] | select(.archived == false)]')
